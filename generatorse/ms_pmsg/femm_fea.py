@@ -55,8 +55,8 @@ def run_post_process(r_g, g, r_outer, h_yr, h_ys, r_m, r_yoke, theta_p_r):
         return B_max
 
     B_rymax = get_B_max(r_yoke, r_m)
-    B_symax = get_B_max(r_g, r_outer - h_ys)
-    B_tmax = get_B_max(r_outer-h_ys, r_outer)
+    B_tmax = get_B_max(r_g, r_outer - h_ys)
+    B_symax = get_B_max(r_outer-h_ys, r_outer)
 
     '''
     sy_area = []
