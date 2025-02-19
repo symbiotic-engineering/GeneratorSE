@@ -1,5 +1,3 @@
-# import sys
-# sys.path.append(r"C:\Users\Noam\generatorSE\GeneratorSE")
 import openmdao.api as om
 from generatorse.ms_pmsg.ms_pmsg import PMSG_Inner_rotor_Opt
 from generatorse.ms_pmsg.structural import PMSG_Inner_Rotor_Structural
@@ -35,11 +33,11 @@ fsql = "log.sql"
 output_root = "MS-PMSG_output"
 mydir = os.path.dirname(os.path.realpath(__file__))  # get path to this file
 
-def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, opt_flag=True, restart_flag=True, femm_flag=True, obj_str="LCOE", ratingMW=17):
+def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, opt_flag=False, restart_flag=True, femm_flag=False, obj_str="cost", ratingMW=17):
     if output_dir is None:
         output_dir = "outputs"
     os.makedirs(output_dir, exist_ok=True)
-    print(obj_str, obj_str.lower())
+
     ratingMW = int(ratingMW)
     target_torque = 1e6 * ratingMW/(np.pi*rated_speed[ratingMW]/30.0)/target_eff
 
@@ -84,7 +82,6 @@ def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, 
     prob.model.add_constraint("torque_ratio", lower=1.05, upper=1.15)
     #prob.model.add_constraint("T_e", upper=1.2*target_torque, ref=1e5)
     prob.model.add_constraint("gen_eff", lower=0.96)
-    prob.model.add_constraint("LCOE", lower=0)
 
     if obj_str.lower() == 'cost':
         prob.model.add_objective("cost_total", ref=1e5)
@@ -92,8 +89,6 @@ def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, 
         prob.model.add_objective("mass_total", ref=1e5)
     elif obj_str.lower() in ['eff','efficiency']:
         prob.model.add_objective("gen_eff", scaler=-1.0)
-    elif obj_str.lower() == 'lcoe':
-        prob.model.add_objective("LCOE", ref=1.0)
     else:
         print('Objective?', obj_str)
 
@@ -176,7 +171,6 @@ def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, 
         prob["P_rated"] = ratingMW * 1e6
         prob["T_rated"] = target_torque
         prob["N_nom"] = rated_speed[ratingMW]
-        prob["N_rated"] = rated_speed[ratingMW]
         prob["N_c"] = 3.0
 
         #Specific costs
@@ -393,33 +387,6 @@ def write_all_data(prob, output_dir=None):
     df = pd.DataFrame(raw_data, columns=["Parameters", "Symbol", "Values", "Units", "Limit"])
     df.to_excel(os.path.join(output_dir, f"Optimized_MS-PMSG_{ratingMW}_MW.xlsx"))
 
-def get_eff_curve(output_str, obj_str, ratingMW):
-    output_dir = os.path.join(mydir, output_str)
-
-    prob = optimize_magnetics_design(output_dir=output_dir, opt_flag=False, obj_str=obj_str,
-                                     ratingMW=int(ratingMW), restart_flag=True, femm_flag=True, cleanup_flag=False)
-
-    rpm = np.unique( np.minimum(rated_speed[int(ratingMW)], gear_ratio * np.arange(2, 8.1, 0.5)) )
-    torque = np.zeros(rpm.shape)
-    shear = np.zeros(rpm.shape)
-    normal = np.zeros(rpm.shape)
-    losses = np.zeros(rpm.shape)
-    eff = np.zeros(rpm.shape)
-    for ir, r in enumerate(rpm):
-        prob["N_nom"] = r
-        prob.run_model()
-        
-        torque[ir] = float(prob.get_val("T_e",units="MN*m"))
-        shear[ir] = float(prob.get_val("Sigma_shear",units="kN/m**2"))
-        normal[ir] = float(prob.get_val("Sigma_normal",units="kN/m**2"))
-        losses[ir] = float(prob.get_val("Losses",units="kW"))
-        eff[ir] = float(prob.get_val("gen_eff"))
-
-    np.savetxt(os.path.join(output_dir, f"eff_curve_{ratingMW}MW-MSPMSG.csv"),
-               np.c_[rpm, torque, shear, normal, losses, eff],
-               delimiter=',',
-               header='RPM,Torque [MNm],Shear stress [kN/m^2],Normal stress [kN/m^2],Losses [kW],Efficiency')
-    
 def run_all(output_str, opt_flag, obj_str, ratingMW):
     output_dir = os.path.join(mydir, output_str)
 
@@ -442,7 +409,7 @@ def run_all(output_str, opt_flag, obj_str, ratingMW):
     cleanup_femm_files(mydir, output_dir)
 
 if __name__ == "__main__":
-    opt_flag = False #True
+    opt_flag = True
     #run_all("outputs15-mass", opt_flag, "mass", 15)
     #run_all("outputs17-mass", opt_flag, "mass", 17)
     #run_all("outputs20-mass", opt_flag, "mass", 20)
@@ -451,10 +418,8 @@ if __name__ == "__main__":
     #run_all("outputs17-cost", opt_flag, "cost", 17)
     #run_all("outputs20-cost", opt_flag, "cost", 20)
     #run_all("outputs22-cost", opt_flag, "cost", 22)
-    #run_all("outputs25-cost", opt_flag, "cost", 25)
-    for k in ratings_known:
-        for obj in ["LCOE"]:#, "mass"]:
-            for m in range(2):
-                run_all(f"outputs{k}-{obj}", opt_flag, obj, k)
+    run_all("outputs25-cost", opt_flag, "cost", 25)
     #for k in ratings_known:
-    #    get_eff_curve(f"outputs{k}-cost", "cost", k)
+    #    for obj in ["cost"]:#, "mass"]:
+    #        for m in range(2):
+    #            run_all(f"outputs{k}-{obj}", opt_flag, obj, k)
