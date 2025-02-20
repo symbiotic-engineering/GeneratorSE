@@ -251,6 +251,8 @@ class FEMM_Geometry(om.ExplicitComponent):
         self.add_output("M_Fery", 0.0, units="kg", desc="rotor yoke iron mass")
         self.add_output("M_Fest", 0.0, units="kg", desc="Stator teeth mass")
         self.add_output("M_Fesy", 0.0, units="kg", desc="Stator yoke mass")
+        self.add_output("P_max", 10, units="kW", desc="maximum power based on hydrodynamic simulation")
+
 
         self.declare_partials("*", "*", method="fd")
 
@@ -712,36 +714,41 @@ class FEMM_Geometry(om.ExplicitComponent):
             outputs["T_e"], outputs["Sigma_shear"] = B_r_B_t(
                 Theta_elec, r_g, l_s, p, g, theta_p_r, I_s, theta_tau_s, layer_1, layer_2, N_c
             )
-            h_coef = 100    # Heat transfer coefficient (W/(m^2 degC))
+            h_coef = 100.0    # Heat transfer coefficient (W/(m^2 degC))
             K_wb = 0.5      # Bare wire slot fill factor (-)
             t_pulse = 5     # time which peak torque can be sustained (s)
-            T_amb = 30      # ambient/coolant temperature [degC]
-            T_max = 120     # max allowable winding temp [decC]
-            T_start = 50    # starting temp before a peak pulse (degC)
-            c_copper = 377      # 
-            τ = mass_copper*c_copper/(h*2*np.pi*r_g*l_s)    # thermal time constant of windings
+            T_amb = 30.0      # ambient/coolant temperature [degC]
+            T_max = 120.0     # max allowable winding temp [decC]
+            T_start = 50.0    # starting temp before a peak pulse (degC)
+            c_copper = 377.0      # 
+            τ = mass_copper*c_copper/(h_coef*2*np.pi*r_g*l_s)    # thermal time constant of windings
             T_ss_pk = T_start+(T_max-T_start)/(1-math.exp(-t_pulse/τ))
-            R_sb = r_g-h_s        # radius of slot, toward the back of motor
-            d_sht = 0.00254       # distance from shoe to toe, assumed to 0.1 inch
-            R_out = 0.5 
-            R_sc = R_out+r_g+d_sht
+            # R_sb = r_outer-h_ys        # radius of slot, toward the back of motor
+            # d_sht = 0.00254       # distance from shoe to toe, assumed to 0.1 inch
+            # R_out = 0.5 
+            # R_sc = r_g + h_s1 + h_s2    # radius to coil
             B_c = 1e6   # coefficient of damping in powertrain
-            K_c = 0     # corefficient of stiffness in powertrain
-            s = 1       # laplace variable, look at sea state stuff !!!!
-            G = 1       # need to incorperate gear ration !!!!!
-            B_g = float(inputs["B_g"])
-            A_s = math.pi/m*Slots_pp*(R_sb**2-R_sc**2)-b_t*(R_sb-R_sc)   #area of single slot
+            K_c = 0.0     # coefficient of stiffness in powertrain
+            s = 1.0       # laplace variable, look at sea state stuff !!!!
+            G = 1.0       # need to incorperate gear ratio !!!!!
+            B_g = float(outputs["B_g"])
+            A_s = math.pi/m*Slots_pp*(h_s**2)-b_t*h_s   #area of single slot
             lambda_bar = 4*N_s*B_g*l_s*r_outer        # flux linkage
-            I_max = 1/N_s*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(m*Slots_pp*rho_copper/(A_s*K_wb)))
+            print("T_ss_pk: ",T_ss_pk)
+            print("A_s: ", A_s)
+            I_max = (1/N_s)*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(m*Slots_pp*rho_copper/(A_s*K_wb)))
             V_s = np.sqrt((B_c+K_c/s)**2+E_p**2)
             V_s_max_csv = V_s/(lambda_bar*p*G)
             f_max_csv = 3/2*lambda_bar*p*I_max*G
             interp_power_sur = interpolate.RegularGridInterpolator((wec_p.force_u, wec_p.voltage_u), wec_p.power_surrogate)
             P_max = interp_power_sur(V_s_max_csv/1000, f_max_csv/1000)
+            print("P_max: ", P_max)
+            print("I_max: ", I_max)
             if I_max < I_s:
                 outputs["I_s"] = I_max
             outputs["P_max"] = P_max
         except Exception as e:
+            print(f"Exception occurred: {e}")
             outputs = bad_inputs(outputs)
             #raise(e)
             
