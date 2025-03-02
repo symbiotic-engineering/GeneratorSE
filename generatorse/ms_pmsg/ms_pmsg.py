@@ -1,9 +1,10 @@
 import numpy as np
 import openmdao.api as om
-from generatorse.common.cost import Generator_Cost
+import generatorse.common.cost as cost
 import generatorse.ms_pmsg.magnetics_design as md
 from generatorse.ms_pmsg.femm_fea import FEMM_Geometry
 from generatorse.ms_pmsg.structural import PMSG_Inner_Rotor_Structural
+from generatorse.ms_pmsg.power import Power
 
 
 class PMSG_Inner_rotor_Opt(om.Group):
@@ -11,7 +12,7 @@ class PMSG_Inner_rotor_Opt(om.Group):
         self.options.declare("magnetics_by_fea", default=True)
 
     def setup(self):
-
+        
         ivcs = om.IndepVarComp()
 
         ivcs.add_output("P_rated", 0.0, units="W", desc="Rated Power")
@@ -22,8 +23,8 @@ class PMSG_Inner_rotor_Opt(om.Group):
         ivcs.add_output("r_g", 0.0, units="m", desc="Air-gap radius")
         ivcs.add_output("l_s", 0.0, units="m", desc="core length")
         ivcs.add_output("h_s", 0.0, units="m", desc="slot height")
-        ivcs.add_output("h_s1", 0.010, desc="Slot Opening height")
-        ivcs.add_output("h_s2", 0.010, desc="Wedge Opening height")
+        ivcs.add_output("h_s1", 0.010, units="m", desc="Slot Opening height")
+        ivcs.add_output("h_s2", 0.010, units="m", desc="Wedge Opening height")
         ivcs.add_output("p", 0.0, desc="Pole pairs")
         ivcs.add_output("g", 0.0, units="m", desc="air gap length")
         ivcs.add_output("I_s", 0.0, units="A", desc="Stator current")
@@ -79,16 +80,19 @@ class PMSG_Inner_rotor_Opt(om.Group):
         else:
             self.add_subsystem("Results_by_analytical_model", md.Results_by_analytical_model(), promotes=["*"])
 
+        self.add_subsystem("power", Power(), promotes=["*"])
         self.add_subsystem("results", md.Results(), promotes=["*"])
         self.add_subsystem("struct", PMSG_Inner_Rotor_Structural(), promotes=["*"])
-        self.add_subsystem("cost", Generator_Cost(), promotes=["*"])
+        self.add_subsystem("cost", cost.Generator_Cost(), promotes=["*"])
+        self.add_subsystem("econ", cost.LCOE_Calc(), promotes=["*"])
         self.connect("D_outer", "D_generator")
+        #self.connect("P_max", "P_max")
 
 if __name__ == "__main__":
     femm_flag = True
     prob = om.Problem()
     prob.model = PMSG_Inner_rotor_Opt(magnetics_by_fea=femm_flag)
+    prob.model.add_constraint("FEMM_geometry.P_max", upper=md.P_rated)
     prob.setup()
     prob.run_model()
-    
     

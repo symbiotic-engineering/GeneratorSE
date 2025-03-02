@@ -1,5 +1,8 @@
 import numpy as np
 import openmdao.api as om
+# import sys
+# sys.path.append(r"C:\Users\Noam\generatorSE\GeneratorSE\ms_pmsg")
+# from femm_fea import FEMM_Geometry
 
 
 class Generator_Cost(om.ExplicitComponent):
@@ -25,15 +28,12 @@ class Generator_Cost(om.ExplicitComponent):
         self.add_input("mass_adder", 0.0, units="kg", desc="Mass to add to total for unaccounted elements")
         self.add_input("cost_adder", 0.0, units="USD", desc="Cost to add to total for unaccounted elements")
 
-        self.add_input("P_max", 0.0, units="kW", desc="maximum power based on hydrodynamic simulation")
-
         # Outputs
         self.add_output("mass_active", 0.0, units="kg", desc="Total active mass")
         self.add_output("mass_hvac", 0.0, units="kg", desc="Cooling system mass")
         self.add_output("cost_hvac", 0.0, units="USD", desc="Cooling system cost")
         self.add_output("mass_total", 0.0, units="kg", desc="Total mass")
         self.add_output("cost_total", 0.0, units="USD", desc="Total cost")
-        self.add_output("LCOE", 1.0, units="USD/kW", desc="Levelized Cost Of Energy")
         
         self.declare_partials("*", "*", method="fd")
 
@@ -49,7 +49,6 @@ class Generator_Cost(om.ExplicitComponent):
         m_sc = float(inputs["mass_NbTi"])
         m_struct = float(inputs["mass_structural"])
         m_add = float(inputs["mass_adder"])
-        P_max = float(inputs["P_max"])
         
         outputs["mass_hvac"] = m_hvac = m_coeff * rating * np.pi * D_gen
         outputs["cost_hvac"] = c_hvac = c_coeff * m_hvac
@@ -75,10 +74,20 @@ class Generator_Cost(om.ExplicitComponent):
 
         # Account for capital and labor cost share 18.9% capital, 61.9% materials, 19.3% labor
         outputs["cost_total"] = tempSum / 0.619
-        cost_total = outputs["cost_total"]
         
-        ### LCOE calculations
+class LCOE_Calc(om.ExplicitComponent):
+    def setup(self):
+        self.add_input("cost_total", 0.0, units="USD", desc="Total cost")
+        self.add_input("P_max", 0.0, units="kW", desc="Maximum power based on hydrodynamic simulation")
 
+        self.add_output("LCOE", 0.0, units="USD/(kW*h)", desc="Levelized Cost Of Energy")
+        self.add_output("AEP", 0.0, units="kW*h", desc="Annual Energy Production")
+
+        self.declare_partials("*", "*", method="fd")
+
+    def compute(self, inputs, outputs):
+        cost_total = inputs["cost_total"]
+        P_max = inputs["P_max"]
         # RM3 capital cost
         capex_wec = 518426277-2664921       # total capex based on sandia 2014 report adjusted for inlfation minus their generator cost
         # RM3 operational cost
@@ -88,9 +97,11 @@ class Generator_Cost(om.ExplicitComponent):
         # Total Cost
         FCR = 0.113         # fixed change rate
         cost_ = (capex_wec+cost_total)*FCR+opex_wec
-
+    
         # Energy generated in a year
         cap_fac = 0.3       # capacity factor of RM3
         AEP = P_max*cap_fac*8760    # annual energy production [kWh]
-
+        outputs["AEP"] = AEP
+        #print("Pmax:", P_max)
+        #print("AEP:", AEP)
         outputs["LCOE"] = cost_/AEP         # levelized cost of energy

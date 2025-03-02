@@ -15,6 +15,7 @@ df_x_unconstrained = df
 force = df_x_unconstrained['f_max']
 voltage = df_x_unconstrained['Vs_max']
 power = -df_x_unconstrained['electrical Power']
+#x_max = df_x_unconstrained['x_max']
 
 # reshape to 2D
 force_u = force.unique()

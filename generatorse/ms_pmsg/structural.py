@@ -176,8 +176,8 @@ class PMSG_stator_inactive(om.ExplicitComponent):
         self.add_input("mass_copper", 0.0, units="kg", desc="Copper Mass")
         self.add_input("M_Fest", 0.0, units="kg", desc="Stator teeth mass")
         self.add_input("mass_structural_rotor", 0.0, units="kg", desc="Rotor structural mass kg")
-        self.add_input("h_s1", 0.010, desc="Slot Opening height")
-        self.add_input("h_s2", 0.010, desc="Wedge Opening height")
+        self.add_input("h_s1", 0.010, units="m", desc="Slot Opening height")
+        self.add_input("h_s2", 0.010, units="m", desc="Wedge Opening height")
 
         self.add_output("u_as", 0.0, units="m", desc="Stator radial deflection")
         self.add_output("y_as", 0.0, units="m", desc="Stator axial deflection")

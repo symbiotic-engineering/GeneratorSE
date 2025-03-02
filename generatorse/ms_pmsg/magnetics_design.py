@@ -214,8 +214,8 @@ class Results_by_analytical_model(om.ExplicitComponent):
         self.add_input("b_s", 0.0, units="m", desc="slot width")
 
         self.add_input("A_1", 0.0, units="A/m", desc="specific current loading")
-        self.add_input("h_s1", 0.010, desc="Slot Opening height")
-        self.add_input("h_s2", 0.010, desc="Wedge Opening height")
+        self.add_input("h_s1", 0.010, unit="m", desc="Slot Opening height")
+        self.add_input("h_s2", 0.010, unit="m", desc="Wedge Opening height")
 
         self.add_input("p", desc="No of pole pairs")
 
@@ -363,7 +363,7 @@ class Results(om.ExplicitComponent):
         self.add_input("P_rated", 0.0, units="W", desc="Machine rating")
         self.add_output("Losses", 0.0, units="W", desc="Total loss")
         self.add_output("gen_eff", 0.0, desc="Generator efficiency")
-        self.add_output("E_p", 0.0, units="V", desc="Stator phase voltage")
+        self.add_input("E_p", 0.0, units="V", desc="Stator phase voltage")
         self.add_input("E_p_target", 0.0, units="V", desc="Target voltage")
         self.add_input("r_g", 0.0, units="m", desc="air gap radius")
         self.add_input("I_s", 0.0, units="A", desc="Stator current amplitude")
@@ -385,6 +385,7 @@ class Results(om.ExplicitComponent):
         self.add_input("H_c", 0.0, units="A/m", desc="coercivity")
         self.add_input("g", 0.0, units="m", desc="air gap length")
         self.add_input("k_sfil", 0.65, desc="slot fill factor")
+        self.add_input("om_m", 0.0, units="rad/s", desc="mechanical angular frequency")
 
         self.declare_partials("*", "*", method="fd")
 
@@ -421,9 +422,10 @@ class Results(om.ExplicitComponent):
         p = inputs["p"]
         h_m = inputs["h_m"]
         T_e = inputs["T_e"]
+        om_m = inputs["om_m"]
 
         # Calculating Losses
-        om_m = 2 * np.pi * N_nom / 60
+        # om_m = 2 * np.pi * N_nom / 60
         om_e = om_m * p
         om_e2 = om_e / (2 * np.pi * 60)
 
@@ -451,7 +453,7 @@ class Results(om.ExplicitComponent):
 
         outputs["demag_mmf_ratio"] = H_demag / H_c
 
-        outputs["E_p"] = E_p = np.sqrt(3/2) * N_s * l_s * r_g * k_wd * om_m * B_g
-
+        # outputs["E_p"] = E_p = np.sqrt(3/2) * N_s * l_s * r_g * k_wd * om_m * B_g
+        E_p = outputs["E_p"]
         outputs["E_p_ratio"] = E_p / E_p_target
         outputs["torque_ratio"] = T_e / T_rated

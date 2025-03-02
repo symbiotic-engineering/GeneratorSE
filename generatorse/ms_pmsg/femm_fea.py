@@ -206,7 +206,7 @@ class FEMM_Geometry(om.ExplicitComponent):
     def setup(self):
         self.add_input("m", 3, desc="number of phases")
         self.add_input("k_sfil", 0.65, desc="slot fill")
-        self.add_input("l_s", 0.0, units="m", desc="Stack length ")
+        self.add_input("l_s", 0.2, units="m", desc="Stack length ")
         self.add_input("L_t", 0.0, units="m", desc="effective stator length for support structure")
 
         self.add_input("p", 0.0, desc="pole pairs ")
@@ -216,8 +216,8 @@ class FEMM_Geometry(om.ExplicitComponent):
 
         #self.add_input("N_nom", 0.0, units="rpm", desc="rated speed")
         self.add_input("f", 0.0, units="Hz", desc="frequency")
-        self.add_input("h_s1", 0.010, desc="Slot Opening height")
-        self.add_input("h_s2", 0.010, desc="Wedge Opening height")
+        self.add_input("h_s1", 0.010, units="m", desc="Slot Opening height")
+        self.add_input("h_s2", 0.010, units="m", desc="Wedge Opening height")
         #self.add_input("ratio", 0.00, desc="Wpole width to pole pitch")
 
         self.add_input("h_m", 0.0, units="m", desc="magnet height")
@@ -234,9 +234,10 @@ class FEMM_Geometry(om.ExplicitComponent):
         self.add_input("rho_Copper", 0.0, units="kg/m**3", desc="Copper density kg/m^3")
         self.add_input("N_s", 0.0, desc="Number of turns in the stator winding")
         self.add_input("b_t", 0.0, units="m", desc="tooth width")
-        self.add_input("E_p", 0.0, units="V", desc="Stator phase voltage")
+        self.add_input("k_wd", desc="Winding factor")
+        self.add_input("N_nom", 0.0, units="rpm", desc="input speed")
 
-        self.add_output("D_outer", 0.0, units="m", desc="Stator outer diameter")
+        self.add_output("D_outer", 1.0, units="m", desc="Stator outer diameter")
         self.add_output("h_t", 0.0, units="m", desc="tooth height")
 
         self.add_output("B_g", 0.0, units="T", desc="Peak air gap flux density B_g")
@@ -251,9 +252,10 @@ class FEMM_Geometry(om.ExplicitComponent):
         self.add_output("M_Fery", 0.0, units="kg", desc="rotor yoke iron mass")
         self.add_output("M_Fest", 0.0, units="kg", desc="Stator teeth mass")
         self.add_output("M_Fesy", 0.0, units="kg", desc="Stator yoke mass")
-        self.add_output("P_max", 10, units="kW", desc="maximum power based on hydrodynamic simulation")
-
-
+        self.add_output("r_inner", 0.0, units="m", desc="Inner radius of stator")
+        self.add_output("om_m", 0.0, units="rad/s", desc="mechanical angular frequency")
+        self.add_output("E_p", 0.0, units="V", desc="Stator phase voltage")
+        
         self.declare_partials("*", "*", method="fd")
 
     def compute(self, inputs, outputs):
@@ -288,7 +290,7 @@ class FEMM_Geometry(om.ExplicitComponent):
         rho_copper = float(inputs["rho_Copper"])
         N_s = float(inputs["N_s"])
         b_t = float(inputs["b_t"])
-        E_p = float(inputs["E_p"])
+        # E_p = float(inputs["E_p"])
 
         q = 1
         p = float(inputs["p"])
@@ -307,6 +309,7 @@ class FEMM_Geometry(om.ExplicitComponent):
         r_m = r_g - g
         r_outer = r_g + h_s1 + h_s2 + h_s + h_ys
         r_inner = r_g + h_s1 + h_s2 + h_s
+        outputs["r_inner"] = r_inner
         r_yoke = r_m - h_m - h_yr
         outputs["D_outer"] = 2*r_outer
         
@@ -710,43 +713,56 @@ class FEMM_Geometry(om.ExplicitComponent):
             outputs["M_Fery"] = V_rotor * rho_Fe * p
             outputs["M_Fesy"] = V_Fesy * rho_Fe
             outputs["mass_iron"] = outputs["M_Fes"] + outputs["M_Fesy"] + outputs["M_Fery"]
-
+            
             outputs["T_e"], outputs["Sigma_shear"] = B_r_B_t(
                 Theta_elec, r_g, l_s, p, g, theta_p_r, I_s, theta_tau_s, layer_1, layer_2, N_c
             )
-            h_coef = 100.0    # Heat transfer coefficient (W/(m^2 degC))
-            K_wb = 0.5      # Bare wire slot fill factor (-)
-            t_pulse = 5     # time which peak torque can be sustained (s)
-            T_amb = 30.0      # ambient/coolant temperature [degC]
-            T_max = 120.0     # max allowable winding temp [decC]
-            T_start = 50.0    # starting temp before a peak pulse (degC)
-            c_copper = 377.0      # 
-            τ = mass_copper*c_copper/(h_coef*2*np.pi*r_g*l_s)    # thermal time constant of windings
-            T_ss_pk = T_start+(T_max-T_start)/(1-math.exp(-t_pulse/τ))
-            # R_sb = r_outer-h_ys        # radius of slot, toward the back of motor
-            # d_sht = 0.00254       # distance from shoe to toe, assumed to 0.1 inch
-            # R_out = 0.5 
-            # R_sc = r_g + h_s1 + h_s2    # radius to coil
-            B_c = 1e6   # coefficient of damping in powertrain
-            K_c = 0.0     # coefficient of stiffness in powertrain
-            s = 1.0       # laplace variable, look at sea state stuff !!!!
-            G = 1.0       # need to incorperate gear ratio !!!!!
             B_g = float(outputs["B_g"])
-            A_s = math.pi/m*Slots_pp*(h_s**2)-b_t*h_s   #area of single slot
-            lambda_bar = 4*N_s*B_g*l_s*r_outer        # flux linkage
-            print("T_ss_pk: ",T_ss_pk)
-            print("A_s: ", A_s)
-            I_max = (1/N_s)*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(m*Slots_pp*rho_copper/(A_s*K_wb)))
-            V_s = np.sqrt((B_c+K_c/s)**2+E_p**2)
-            V_s_max_csv = V_s/(lambda_bar*p*G)
-            f_max_csv = 3/2*lambda_bar*p*I_max*G
-            interp_power_sur = interpolate.RegularGridInterpolator((wec_p.force_u, wec_p.voltage_u), wec_p.power_surrogate)
-            P_max = interp_power_sur(V_s_max_csv/1000, f_max_csv/1000)
-            print("P_max: ", P_max)
-            print("I_max: ", I_max)
-            if I_max < I_s:
-                outputs["I_s"] = I_max
-            outputs["P_max"] = P_max
+            k_wd = float(inputs["k_wd"])
+            N_nom = float( inputs["N_nom"] )
+            outputs["om_m"] = om_m = 2 * np.pi * N_nom / 60
+            outputs["E_p"] = np.sqrt(3/2) * N_s * l_s * r_g * k_wd * om_m * B_g
+            # torque_e = float(outputs["T_e"])
+            # h_coef = 100.0    # Heat transfer coefficient (W/(m^2 degC))
+            # K_wb = 0.5      # Bare wire slot fill factor (-)
+            # t_pulse = 5     # time which peak torque can be sustained (s)
+            # T_amb = 30.0      # ambient/coolant temperature [degC]
+            # T_max = 120.0     # max allowable winding temp [decC]
+            # T_start = 50.0    # starting temp before a peak pulse (degC)
+            # c_copper = 377.0      # 
+            # τ = mass_copper*c_copper/(h_coef*2*np.pi*r_outer*l_s)    # thermal time constant of windings
+            # T_ss_pk = T_start+(T_max-T_start)/(1-math.exp(-t_pulse/τ))
+            # # R_sb = r_outer-h_ys        # radius of slot, toward the back of motor
+            # # d_sht = 0.00254       # distance from shoe to toe, assumed to 0.1 inch
+            # # R_out = 0.5 
+            # # R_sc = r_g + h_s1 + h_s2    # radius to coil
+            # B_c = 1e6   # coefficient of damping in powertrain
+            # K_c = 0.0     # coefficient of stiffness in powertrain
+            # wavefreq = 0.3      # frequency of waves as set in the sea state sim
+            # s = wavefreq*1j     # laplace variable, look at sea state stuff !!!!
+            # gear_ratio = float(inputs["gear_ratio"])       # need to incorperate gear ratio !!!!!
+            # B_g = float(outputs["B_g"])
+            # A_s = math.pi/m*Slots_pp*(h_s**2)-b_t*h_s   #area of single slot
+            # lambda_bar = 4*N_s*B_g*l_s*r_outer        # flux linkage
+            # # print("T_ss_pk: ",T_ss_pk)
+            # # print("A_s: ", A_s)
+            # I_max = (1/N_s)*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(m*Slots_pp*rho_copper/(A_s*K_wb)))
+            # # print("lambda_bar:", lambda_bar)
+            # V_s = np.sqrt((B_c+K_c/s)**2+E_p**2)
+            # V_s_max_csv = V_s/(lambda_bar*p*gear_ratio)
+            # # f_max_csv = 3/2*lambda_bar*p*I_max*G
+            # f_max_csv = torque_e*gear_ratio
+            # interp_power_sur = interpolate.RegularGridInterpolator((wec_p.force_u, wec_p.voltage_u), wec_p.power_surrogate)
+            # # print("Grid Points:", interp_power_sur.grid)  # Tuple of arrays defining the grid
+            # # print("Data Values:", interp_power_sur.values)  # The values at the grid points
+            # # print("V_s_max_csv:", V_s_max_csv)
+            # # print("f_max_csv", f_max_csv)
+            # P_max = interp_power_sur([V_s_max_csv, f_max_csv])/1000     # in kW
+            # print("P_max: ", P_max)
+            # print("I_max: ", I_max)
+            # if I_max < I_s:
+            #     outputs["I_s"] = I_max
+            # outputs["P_max"] = P_max
         except Exception as e:
             print(f"Exception occurred: {e}")
             outputs = bad_inputs(outputs)
