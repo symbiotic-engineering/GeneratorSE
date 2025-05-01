@@ -80,8 +80,8 @@ def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, 
     #prob.driver.recording_options["record_objectives"] = True
 
     prob.model.add_design_var("r_g", lower=0.5, upper=2.0)      # airgap radius
-    prob.model.add_design_var("l_s", lower=0.5, upper=2.5)      # core length
-    prob.model.add_design_var("h_s", lower=0.025, upper=0.1)      #, ref=0.01)  # yoke height
+    prob.model.add_design_var("l_s", lower=0.5, upper=2.5)      # stack length
+    prob.model.add_design_var("h_s", lower=0.025, upper=0.1)      #, ref=0.01)  # slot height
     prob.model.add_design_var("g", lower=0.006, upper=0.009)     #, ref=0.01)   # airgap length
     prob.model.add_design_var("h_yr", lower=0.01, upper=0.1)     #, ref=0.01)   # rotor yoke height
     prob.model.add_design_var("h_ys", lower=0.01, upper=0.1)     #, ref=0.01)   # stator yoke height
@@ -90,7 +90,7 @@ def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, 
     prob.model.add_design_var("h_m", lower=0.005, upper=0.075)   #, ref=0.01)   # magnet height
     prob.model.add_design_var("I_s", lower=500, upper=6000)      #, ref=1e3)    # Stator current
     prob.model.add_design_var("ratio", lower=0.7, upper=0.85)   # ratio of magnet width to pole pitch
-    prob.model.add_design_var("gear_ratio", lower=0.0)          # effective gear ratio
+    prob.model.add_design_var("gear_ratio", lower=0.0, upper=30)          # effective gear ratio
 
 
     #prob.model.add_constraint("E_p", upper=1.2 * 3300, ref=3000)
@@ -176,7 +176,7 @@ def optimize_magnetics_design(prob_in=None, output_dir=None, cleanup_flag=True, 
         prob["q1"] = 1  # slots per pole per phase
         prob["r_g"] = 2.0
         prob["ratio"]= 0.7
-        prob["gear_ratio"] = 0.5
+        prob["gear_ratio"] = 4
 
         prob["t_s"] = 0.02
         prob["t_wr"] = 0.02
@@ -407,7 +407,7 @@ def write_all_data(prob, output_dir=None):
         ["Cost to add to total for unaccounted elements"      , "cost_adder"        , 1e-3*float(prob.get_val("cost_adder", units="USD")[0]), "k$"],
         ["Total mass"                                         , "mass_total"        , float(prob.get_val("mass_total", units="t")[0]), "t"],
         ["Total cost"                                         , "cost_total"        , 1e-3*float(prob.get_val("cost_total", units="USD")[0]), "k$"],
-        ["Levelized Cost Of Energy"                           , "LCOE"              , float(prob.get_val("LCOE", units="USD/kWh")[0]), "USD/kWh"]
+        ["Levelized Cost Of Energy"                           , "LCOE"              , float(prob.get_val("LCOE", units="USD/(kW*h)")[0]), "USD/kWh"]
     ]
 
     df = pd.DataFrame(raw_data, columns=["Parameters", "Symbol", "Values", "Units", "Limit"])
@@ -462,7 +462,7 @@ def run_all(output_str, opt_flag, obj_str, ratingkW):
     cleanup_femm_files(mydir, output_dir)
 
 if __name__ == "__main__":
-    opt_flag = True
+    opt_flag = False #True
     #run_all("outputs15-mass", opt_flag, "mass", 15)
     #run_all("outputs17-mass", opt_flag, "mass", 17)
     #run_all("outputs20-mass", opt_flag, "mass", 20)

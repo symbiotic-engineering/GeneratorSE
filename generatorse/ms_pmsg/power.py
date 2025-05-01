@@ -16,7 +16,7 @@ class Power(om.ExplicitComponent):
         self.add_input('h_ys', 0.0, units='m', desc="stator yoke height")
         self.add_input('b_t', 0.01, units='m', desc="tooth width")
         self.add_input('N_s', 0.0, desc="Number of turns in the stator winding")
-        self.add_input('rho_copper', units="kg/m**3", desc="Copper density kg/m^3")
+        self.add_input('rho_Copper', units="kg/m**3", desc="Copper density kg/m^3")
         self.add_input('p', 0.0, desc="pole pairs")
         self.add_input('E_p', 0.0, units="V", desc="Stator phase voltage")
         self.add_input('m', 3, desc="number of phases")
@@ -25,6 +25,8 @@ class Power(om.ExplicitComponent):
         self.add_input('h_s2', 0.010, units="m", desc="Slot wedge height")
         self.add_input('k_wd', desc="Winding factor")
         self.add_input("N_c", 0.0, desc="Number of turns per coil in series")
+        self.add_input("lambda_bar", 0.0, desc="flux linkage")
+        self.add_input("r_g", 0.0, units="m", desc="air gap radius ")
 
         self.add_output('P_max', 0.0, units="kW", desc="maximum power based on hydrodynamic simulation")
         self.add_output('I_max', 0.0, units="A", desc="Max stator current based on thermal constraints")
@@ -39,7 +41,7 @@ class Power(om.ExplicitComponent):
         # h_ys = float(inputs["h_ys"])
         b_t = float(inputs["b_t"])
         N_s = float(inputs["N_s"])
-        rho_copper = float(inputs["rho_copper"])
+        rho_Copper = float(inputs["rho_Copper"])
         p = float(inputs["p"])
         E_p = float(inputs["E_p"])
         m = float(inputs["m"])
@@ -48,6 +50,8 @@ class Power(om.ExplicitComponent):
         r_inner = float(inputs["r_inner"])
         h_s2 = float(inputs["h_s2"])
         N_c = float(inputs["N_c"])
+        r_g = float(inputs["r_g"])
+        lambda_bar_ = float(inputs["lambda_bar"])
         h_coef = 100.0    # Heat transfer coefficient (W/(m^2 degC))
         K_wb = 0.5      # Bare wire slot fill factor (-)
         t_pulse = 5     # time which peak torque can be sustained (s)
@@ -67,29 +71,51 @@ class Power(om.ExplicitComponent):
         s = wavefreq*1j     # laplace variable, look at sea state stuff !!!!
         gear_ratio = float(inputs["gear_ratio"])       # need to incorperate gear ratio !!!!!
         B_g = float(inputs["B_g"])
-        A_s = math.pi/S*(r_inner**2-(r_inner-h_s)**2)-b_t*(h_s2+h_s)   #area of single slot, from Hanselman eq 9.12
+        # print("r_inner: ", r_inner)
+        # print("h_s: ", h_s)
+        # print("h_s2: ", h_s2)
+        # print("b_t: ", b_t)
+        A_s = math.pi/S*(r_inner**2-(r_inner-h_s)**2)-b_t*(h_s2+h_s)   # area of single slot, from Hanselman eq 9.12
         K_t = 2*S/m*N_c*B_g*l_s*r_outer        # torque constant
-        lambda_bar = 4*S/m*N_c*B_g*l_s*r_outer        # flux linkage
+        alpha = 0.00393     # temperature coefficient of copper [degC**-1]
+        lambda_bar = 4*S/m*N_c*B_g*l_s*r_g        # flux linkage
+        # print("lambda 1: ", lambda_bar)
+        # print("lambda 2: ", lambda_bar_)
         # print("T_ss_pk: ",T_ss_pk)
         # print("A_s: ", A_s)
-        I_max = (m**2/(S*N_c))*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(S*rho_copper/(A_s*K_wb)))
-        print("I_max:", I_max)
-        V_s = np.sqrt((B_c+K_c/s)**2+E_p**2)
-        V_s_max_csv = V_s/(lambda_bar*p*gear_ratio)
+        # print("E_p: ", E_p)
+        # print("S: ", S)
+        # print("rho_Copper: ", rho_Copper)
+        # print("K_wb: ", K_wb)
+        # print("T_ss: ", T_ss_pk)
+        # print("s: ", s)
+        # print("B_g: ", B_g)
+        # print("m: ", m)
+        # print("p: ", p)
+        # print("R_so", r_outer)
+        # print("N_c: ", N_c)
+        # print("R_ro", r_g)
+        I_max = (m**2/(S*N_c))*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(S*rho_Copper/(A_s*K_wb)))
+        # print("I_max:", I_max)
+        I_max_2 = np.sqrt(np.pi*r_outer*K_wb*A_s*h_coef/(2*rho_Copper*N_c**2*S)*(T_ss_pk-T_amb)/(1+alpha*(T_ss_pk-T_start)))
+        # print("I_max_2:", I_max_2)
+        V_s = np.sqrt(((B_c+K_c/s)*I_max)**2+E_p**2)
+        # print("V_s: ", V_s)
+        V_s_max_csv = V_s.real#/(lambda_bar_*p*gear_ratio)
         f_max_csv = K_t*I_max*gear_ratio
-        f_max_csv2 = T_e*gear_ratio
-        print("f_max_csv: ", f_max_csv)
-        print("f_max_csv2: ", f_max_csv2)
+        f_max_csv2 = T_e*gear_ratio     # testing alternative
+        # print("f_max_csv: ", f_max_csv)
+        # print("f_max_csv2: ", f_max_csv2)
         assert not np.isnan(V_s_max_csv), "V_s_max_csv is NaN!"
-        assert not np.isnan(f_max_csv), "f_max_csv is NaN!"
+        assert not np.isnan(f_max_csv2), "f_max_csv is NaN!"
         interp_power_sur = interpolate.RegularGridInterpolator((wec_p.force_u, wec_p.voltage_u), wec_p.power_surrogate)
-        print("Grid Points:", interp_power_sur.grid)  # Tuple of arrays defining the grid
-        print("Data Values:", interp_power_sur.values)  # The values at the grid points
-        print("V_s_max_csv:", V_s_max_csv)
-        print("f_max_csv", f_max_csv)
-        P_max = interp_power_sur([V_s_max_csv, f_max_csv])/1000     # in kW
-        print("P_max: ", P_max)
-        print("I_max: ", I_max)
+        # print("Grid Points:", interp_power_sur.grid)  # tuple of arrays defining the grid
+        # print("Data Values:", interp_power_sur.values)  # The values at the grid points
+        # print("V_s_max_csv:", V_s_max_csv)
+        # print("f_max_csv2", f_max_csv2)
+        P_max = interp_power_sur([f_max_csv2, V_s_max_csv])/1000     # in kW 5/1 switched f and V to be correct
+        # print("P_max: ", P_max)
+        # print("I_max: ", I_max)
         outputs["I_max"] = I_max
         outputs["P_max"] = P_max
 

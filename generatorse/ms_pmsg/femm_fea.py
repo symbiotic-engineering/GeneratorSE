@@ -60,6 +60,7 @@ def run_post_process(r_g, g, r_outer, h_yr, h_ys, r_m, r_yoke, theta_p_r):
     B_rymax = get_B_max(r_yoke, r_m)
     B_tmax = get_B_max(r_g, r_outer - h_ys)
     B_symax = get_B_max(r_outer-h_ys, r_outer)
+    lambda_bar = lambda_p()
 
     '''
     sy_area = []
@@ -108,7 +109,7 @@ def run_post_process(r_g, g, r_outer, h_yr, h_ys, r_m, r_yoke, theta_p_r):
     force = np.trapz(B_r_normal[:, 1] ** 2 - B_t_normal[:, 1] ** 2, B_r_normal[:, 0])
     sigma_n = abs(force / (2*mu0)) / circ
 
-    return B_g_peak, B_rymax, B_symax, B_tmax, sigma_n, V_rotor, V_stator
+    return B_g_peak, B_rymax, B_symax, B_tmax, sigma_n, V_rotor, V_stator, lambda_bar
 
 
 def B_r_B_t(Theta_elec, r_g, l_s, p, g, theta_p_r, I_s, theta_tau_s, layer_1, layer_2, N_c):
@@ -200,6 +201,15 @@ def B_r_B_t(Theta_elec, r_g, l_s, p, g, theta_p_r, I_s, theta_tau_s, layer_1, la
     #return torque.mean(), sigma_t.mean()
     return np.abs(torque), np.abs(sigma_t)
 
+def lambda_p():         # calculate the flux linkage of phase p_name (string)
+    lambda_abc = {}
+    for i in ["A+","B+","C+"]:
+        lambda_abc[i] = femm.mo_getcircuitproperties(i)[2] 
+    T_clarke = np.array([[1, -1/2, -1/2], 
+                        [0, np.sqrt(3)/2, -np.sqrt(3)/2]])
+    lambda_vec = np.array([lambda_abc["A+"], lambda_abc["B+"], lambda_abc["C+"]])
+    lambda_clrk = T_clarke @ lambda_vec          # np.multi.matmul(T_clarke,lambda_abc)
+    return np.linalg.norm(lambda_clrk)
 
 
 class FEMM_Geometry(om.ExplicitComponent):
@@ -255,7 +265,8 @@ class FEMM_Geometry(om.ExplicitComponent):
         self.add_output("r_inner", 0.0, units="m", desc="Inner radius of stator")
         self.add_output("om_m", 0.0, units="rad/s", desc="mechanical angular frequency")
         self.add_output("E_p", 0.0, units="V", desc="Stator phase voltage")
-        
+        self.add_output("lambda_bar", 0.0, desc="flux linkage")
+
         self.declare_partials("*", "*", method="fd")
 
     def compute(self, inputs, outputs):
@@ -287,7 +298,7 @@ class FEMM_Geometry(om.ExplicitComponent):
         #N_nom = float(inputs["N_nom"])
         tau_s = float(inputs["tau_s"])
         mass_copper = float(inputs["mass_copper"])
-        rho_copper = float(inputs["rho_Copper"])
+        rho_Copper = float(inputs["rho_Copper"])
         N_s = float(inputs["N_s"])
         b_t = float(inputs["b_t"])
         # E_p = float(inputs["E_p"])
@@ -706,6 +717,7 @@ class FEMM_Geometry(om.ExplicitComponent):
                 outputs["Sigma_normal"],
                 V_rotor,
                 V_stator,
+                outputs["lambda_bar"]
             ) = run_post_process(r_g, g, r_outer, h_yr, h_ys, r_m, r_yoke, theta_p_r)
             V_Fesy = L_t * np.pi * ((r_g + h_s + h_ys) ** 2 - (r_g + h_s) ** 2)  # volume of iron in stator yoke
             outputs["M_Fes"] = V_stator * rho_Fe * p
@@ -746,7 +758,7 @@ class FEMM_Geometry(om.ExplicitComponent):
             # lambda_bar = 4*N_s*B_g*l_s*r_outer        # flux linkage
             # # print("T_ss_pk: ",T_ss_pk)
             # # print("A_s: ", A_s)
-            # I_max = (1/N_s)*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(m*Slots_pp*rho_copper/(A_s*K_wb)))
+            # I_max = (1/N_s)*np.sqrt(np.pi*r_outer*h_coef*(T_ss_pk-T_amb)/(m*Slots_pp*rho_Copper/(A_s*K_wb)))
             # # print("lambda_bar:", lambda_bar)
             # V_s = np.sqrt((B_c+K_c/s)**2+E_p**2)
             # V_s_max_csv = V_s/(lambda_bar*p*gear_ratio)

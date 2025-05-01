@@ -454,6 +454,6 @@ class Results(om.ExplicitComponent):
         outputs["demag_mmf_ratio"] = H_demag / H_c
 
         # outputs["E_p"] = E_p = np.sqrt(3/2) * N_s * l_s * r_g * k_wd * om_m * B_g
-        E_p = outputs["E_p"]
+        E_p = inputs["E_p"]
         outputs["E_p_ratio"] = E_p / E_p_target
         outputs["torque_ratio"] = T_e / T_rated
